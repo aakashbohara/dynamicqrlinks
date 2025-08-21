@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dyanamic QR Links – Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body class="surface">
+    <header class="topbar">
+      <div class="topbar__left">
+        <div class="logo">⚡</div>
+        <div class="appname">Dyanamic QR Links</div>
+      </div>
+      <div class="topbar__right">
+        <button id="logoutBtn" class="btn btn--ghost">Logout</button>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Create -->
+      <section class="panel">
+        <h2>Create a short link</h2>
+        <form id="createForm" class="form form--inline">
+          <label class="grow">
+            <span class="tiny muted">Target URL</span>
+            <input
+              type="url"
+              name="target_url"
+              placeholder="https://domain.com/very/long/path"
+              required
+            />
+          </label>
+          <label>
+            <span class="tiny muted">Custom code (optional)</span>
+            <input type="text" name="code" placeholder="my-campaign" />
+          </label>
+          <button type="submit" class="btn btn--primary">Create</button>
+        </form>
+        <p id="createMsg" class="msg"></p>
+      </section>
+
+      <!-- List -->
+      <section class="panel">
+        <div class="section-header">
+          <h2>Your links</h2>
+          <input
+            id="searchInput"
+            class="input--search overlap"
+            type="search"
+            placeholder="Search by code or URL…"
+          />
+        </div>
+
+        <div id="skeleton" class="skeleton-list">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+
+        <div id="emptyState" class="empty" style="display: none">
+          <div class="emoji">🗂️</div>
+          <p>No links yet. Create your first one above.</p>
+        </div>
+
+        <div id="links" class="cards"></div>
+      </section>
+    </main>
+
+    <div id="toast"></div>
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>

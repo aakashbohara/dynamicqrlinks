@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dyanamic QR Links – Sign in</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+  </head>
+  <body class="surface">
+    <header class="topbar">
+      <div class="topbar__left">
+        <div class="logo">⚡</div>
+        <div class="appname">Dyanamic QR Links</div>
+      </div>
+    </header>
+
+    <main class="container center">
+      <section class="auth panel">
+        <h1>Welcome back</h1>
+        <p class="muted">Sign in to manage your short links</p>
+
+        <form
+          id="loginForm"
+          class="form form--stack"
+          method="post"
+          action="/login"
+          autocomplete="on"
+        >
+          <label>
+            <span>Username</span>
+            <input type="text" name="username" placeholder="mjadmin" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input
+              type="password"
+              name="password"
+              placeholder="••••••••"
+              required
+            />
+          </label>
+          <button type="submit" class="btn btn--primary btn--block">
+            Sign in
+          </button>
+        </form>
+
+        <p id="msg" class="msg"></p>
+      </section>
+    </main>
+
+    <div id="toast"></div>
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>
