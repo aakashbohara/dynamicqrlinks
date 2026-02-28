@@ -80,10 +80,11 @@ def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     if not auth.authenticate_user(form_data.username, form_data.password):
         raise HTTPException(status_code=400, detail="Invalid credentials")
     token = auth.create_access_token({"sub": form_data.username})
-    secure_cookie = ENVIRONMENT == "prod"
+    # Only set secure cookie if HTTPS is configured
+    is_https = os.getenv("PUBLIC_BASE_URL", "").startswith("https://")
     response.set_cookie(
         key="access_token", value=token,
-        httponly=True, samesite="lax", secure=secure_cookie, path="/", max_age=3600
+        httponly=True, samesite="lax", secure=is_https, path="/", max_age=3600
     )
     return {"access_token": token, "token_type": "bearer"}
 
