@@ -1,3 +1,9 @@
+# Environment variables (secrets!)
+.env
+
+# SQLite dev database
+*.db
+
 # Virtual environment
 env/
 venv/

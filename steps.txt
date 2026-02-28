@@ -1,0 +1,5 @@
+python -m venv env
+.\env\Scripts\Activate
+create an app folder 
+cd app
+pip install python-dotenv
