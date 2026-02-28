@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from pathlib import Path
@@ -9,15 +10,43 @@ import models
 import qr_utils
 import schemas
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 
-load_dotenv()
+load_dotenv(Path(__file__).parent.parent / ".env")
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
+
+# --- Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+)
+logger = logging.getLogger("qrlinks")
+
+# --- DB tables ---
 models.Base.metadata.create_all(bind=database.engine)
 
-app = FastAPI(title="Dyanamic QR Links")
+app = FastAPI(
+    title="Dynamic QR Links",
+    description="Create short links with dynamic QR codes. Update destinations without changing the QR.",
+    version="1.0.0",
+)
+
+# --- CORS (allow frontend dev servers, etc.) ---
+origins = ["*"] if ENVIRONMENT == "dev" else [
+    os.getenv("PUBLIC_BASE_URL", "http://localhost:8000"),
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ---- Serve frontend (same origin) ----
 FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -40,16 +69,21 @@ def get_config(request: Request):
     base = os.getenv("PUBLIC_BASE_URL") or str(request.base_url).rstrip("/")
     return {"public_base_url": base}
 
+# Health check (useful for uptime monitors & load balancers)
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"status": "ok", "env": ENVIRONMENT}
+
 # ---------- API ----------
 @app.post("/login", response_model=schemas.Token)
 def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     if not auth.authenticate_user(form_data.username, form_data.password):
         raise HTTPException(status_code=400, detail="Invalid credentials")
     token = auth.create_access_token({"sub": form_data.username})
-    # Set cookie for dashboard access (server-side gate)
+    secure_cookie = ENVIRONMENT == "prod"
     response.set_cookie(
         key="access_token", value=token,
-        httponly=True, samesite="lax", secure=False, path="/", max_age=3600
+        httponly=True, samesite="lax", secure=secure_cookie, path="/", max_age=3600
     )
     return {"access_token": token, "token_type": "bearer"}
 
@@ -60,6 +94,7 @@ def logout(response: Response):
 
 @app.post("/create", response_model=schemas.LinkOut)
 def create_link(link_in: schemas.LinkCreate, db=Depends(database.get_db), user=Depends(auth.get_current_user)):
+    logger.info("Creating link: code=%s target=%s by=%s", link_in.code, link_in.target_url, user)
     return crud.create_link(db, link_in)
 
 @app.patch("/update/{code}", response_model=schemas.LinkOut)
@@ -67,11 +102,27 @@ def update_link(code: str, link_in: schemas.LinkUpdate, db=Depends(database.get_
     link = crud.update_link(db, code, link_in.target_url)
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
+    logger.info("Updated link %s → %s by=%s", code, link_in.target_url, user)
     return link
 
-@app.get("/links", response_model=list[schemas.LinkOut])
-def list_links(db=Depends(database.get_db), user=Depends(auth.get_current_user)):
-    return crud.get_links(db)
+@app.delete("/delete/{code}", response_model=schemas.MessageOut)
+def delete_link(code: str, db=Depends(database.get_db), user=Depends(auth.get_current_user)):
+    ok = crud.delete_link(db, code)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Link not found")
+    logger.info("Deleted link %s by=%s", code, user)
+    return {"ok": True, "detail": f"Link '{code}' deleted"}
+
+@app.get("/links", response_model=schemas.PaginatedLinks)
+def list_links(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db=Depends(database.get_db),
+    user=Depends(auth.get_current_user),
+):
+    items = crud.get_links(db, skip=skip, limit=limit)
+    total = crud.count_links(db)
+    return {"items": items, "total": total, "skip": skip, "limit": limit}
 
 # Back-compat /r/{code}
 @app.get("/r/{code}", include_in_schema=False)
@@ -82,12 +133,13 @@ def redirect_r(code: str, db=Depends(database.get_db)):
     try:
         crud.increment_click(db, code)
     except Exception:
-        pass
+        logger.exception("Failed to increment click for %s", code)
     return RedirectResponse(url=link.target_url, status_code=307)
 
 # Pretty redirect /{code}
 RESERVED = {"", "docs", "openapi.json", "redoc", "static", "dashboard", "config",
-            "login", "logout", "create", "update", "links", "qr", "favicon.ico"}
+            "login", "logout", "create", "update", "delete", "links", "qr",
+            "favicon.ico", "health"}
 
 @app.get("/{code}", include_in_schema=False)
 def redirect_pretty(code: str, db=Depends(database.get_db)):
@@ -99,7 +151,7 @@ def redirect_pretty(code: str, db=Depends(database.get_db)):
     try:
         crud.increment_click(db, code)
     except Exception:
-        pass
+        logger.exception("Failed to increment click for %s", code)
     return RedirectResponse(url=link.target_url, status_code=307)
 
 @app.get("/qr/{code}")

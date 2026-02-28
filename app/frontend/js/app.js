@@ -2,8 +2,9 @@
 const API = {
   login: () => "/login",
   create: () => "/create",
-  links: () => "/links",
+  links: (skip = 0, limit = 50) => `/links?skip=${skip}&limit=${limit}`,
   update: (code) => `/update/${encodeURIComponent(code)}`,
+  del: (code) => `/delete/${encodeURIComponent(code)}`,
   qr: (code) => `/qr/${encodeURIComponent(code)}`,
   short: (code) => `/${encodeURIComponent(code)}`, // pretty path
 };
@@ -123,10 +124,14 @@ const emptyState = $("#emptyState");
 const createMsg = $("#createMsg");
 const logoutBtn = $("#logoutBtn");
 const searchInput = $("#searchInput");
+const pagination = $("#pagination");
+const prevBtn = $("#prevBtn");
+const nextBtn = $("#nextBtn");
+const pageInfo = $("#pageInfo");
 
-const ensureAuthed = () => {
-  if (!getToken() && (createForm || linksWrap)) window.location = "/";
-};
+const PAGE_SIZE = 50;
+let currentSkip = 0;
+let totalLinks = 0;
 
 const qrCache = new Map(); // code -> base64
 
@@ -139,17 +144,19 @@ async function base64ToBlobUrl(b64) {
   return URL.createObjectURL(blob);
 }
 
-async function loadLinks() {
+async function loadLinks(skip = 0, limit = PAGE_SIZE) {
   skeleton && (skeleton.style.display = "block");
   emptyState && (emptyState.style.display = "none");
   linksWrap && (linksWrap.innerHTML = "");
   try {
-    const list = await fetchJSON(
-      API.links(),
+    const data = await fetchJSON(
+      API.links(skip, limit),
       { method: "GET" },
       { auth: true }
     );
-    return Array.isArray(list) ? list : [];
+    totalLinks = data.total || 0;
+    currentSkip = skip;
+    return Array.isArray(data.items) ? data.items : [];
   } catch (e) {
     toast(e.message, "error");
     return [];
@@ -165,6 +172,7 @@ function renderOneLink(item) {
 
   const card = document.createElement("div");
   card.className = "linkcard";
+  card.dataset.code = code;
   const left = document.createElement("div");
   left.className = "linkcard__main";
   left.innerHTML = `
@@ -189,6 +197,7 @@ function renderOneLink(item) {
           item.target_url
         }" target="_blank" rel="noopener">${item.target_url}</a>
         <button class="btn btn--sm btn--ghost edit-btn">Edit</button>
+        <button class="btn btn--sm btn--ghost del-btn" style="color:var(--error);" title="Delete">Delete</button>
       </div>
     </div>
 
@@ -254,6 +263,24 @@ function renderOneLink(item) {
     }
   });
 
+  // Delete
+  $(".del-btn", card)?.addEventListener("click", async () => {
+    if (!confirm(`Delete link "${code}"? This cannot be undone.`)) return;
+    try {
+      await fetchJSON(API.del(code), { method: "DELETE" }, { auth: true });
+      toast(`Deleted "${code}"`, "success");
+      card.remove();
+      totalLinks--;
+      updatePagination();
+      // show empty state if no cards left
+      if (!linksWrap.children.length) {
+        emptyState && (emptyState.style.display = "block");
+      }
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  });
+
   (async () => {
     try {
       let b64 = qrCache.get(code);
@@ -280,14 +307,48 @@ function renderOneLink(item) {
   })();
 }
 
+function updatePagination() {
+  if (!pagination) return;
+  if (totalLinks <= PAGE_SIZE) {
+    pagination.style.display = "none";
+    return;
+  }
+  pagination.style.display = "flex";
+  const page = Math.floor(currentSkip / PAGE_SIZE) + 1;
+  const totalPages = Math.ceil(totalLinks / PAGE_SIZE);
+  pageInfo && (pageInfo.textContent = `Page ${page} of ${totalPages}  (${totalLinks} links)`);
+  prevBtn && (prevBtn.disabled = currentSkip === 0);
+  nextBtn && (nextBtn.disabled = currentSkip + PAGE_SIZE >= totalLinks);
+}
+
 function renderLinks(list) {
   linksWrap.innerHTML = "";
   if (!list.length) {
     emptyState.style.display = "block";
+    pagination && (pagination.style.display = "none");
     return;
   }
   emptyState.style.display = "none";
   list.forEach(renderOneLink);
+  updatePagination();
+}
+
+// Pagination buttons
+if (prevBtn) {
+  prevBtn.addEventListener("click", async () => {
+    const newSkip = Math.max(0, currentSkip - PAGE_SIZE);
+    const list = await loadLinks(newSkip);
+    renderLinks(list);
+  });
+}
+if (nextBtn) {
+  nextBtn.addEventListener("click", async () => {
+    const newSkip = currentSkip + PAGE_SIZE;
+    if (newSkip < totalLinks) {
+      const list = await loadLinks(newSkip);
+      renderLinks(list);
+    }
+  });
 }
 
 // Create
@@ -345,7 +406,7 @@ async function initDashboard() {
     return;
   }
   await loadConfig();
-  const list = await loadLinks();
+  const list = await loadLinks(0);
   renderLinks(list);
 }
 if (linksWrap || createForm) initDashboard();

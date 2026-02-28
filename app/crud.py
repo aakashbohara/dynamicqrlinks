@@ -29,11 +29,28 @@ def update_link(db: Session, code: str, target_url: str) -> models.ShortLink | N
     db.refresh(link)
     return link
 
+def delete_link(db: Session, code: str) -> bool:
+    link = db.query(models.ShortLink).filter_by(code=code).first()
+    if not link:
+        return False
+    db.delete(link)
+    db.commit()
+    return True
+
 def get_link(db: Session, code: str) -> models.ShortLink | None:
     return db.query(models.ShortLink).filter_by(code=code).first()
 
-def get_links(db: Session) -> list[models.ShortLink]:
-    return db.query(models.ShortLink).all()
+def get_links(db: Session, skip: int = 0, limit: int = 100) -> list[models.ShortLink]:
+    return (
+        db.query(models.ShortLink)
+        .order_by(models.ShortLink.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+def count_links(db: Session) -> int:
+    return db.query(models.ShortLink).count()
 
 def increment_click(db: Session, code: str) -> None:
     link = db.query(models.ShortLink).filter_by(code=code).first()

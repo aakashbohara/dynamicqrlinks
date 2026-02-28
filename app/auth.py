@@ -1,21 +1,26 @@
-import hmac
 import os
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
+import hmac
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
-load_dotenv()
+# Explicitly load .env from project root (parent of app/)
+ENV_PATH = Path(__file__).parent.parent / ".env"
+load_dotenv(ENV_PATH)
+logger = logging.getLogger(__name__)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
+ENVIRONMENT = os.getenv("ENVIRONMENT", "dev")
 
-# Accept USERNAME/PASSWORD or ADMIN_* (either works)
-ADMIN_USERNAME = (os.getenv("ADMIN_USERNAME") or os.getenv("USERNAME") or "").strip()
-ADMIN_PASSWORD = (os.getenv("ADMIN_PASSWORD") or os.getenv("PASSWORD") or "").strip()
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
 
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY is not set")
@@ -30,7 +35,7 @@ def authenticate_user(username: str, password: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

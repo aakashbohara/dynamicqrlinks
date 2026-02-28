@@ -404,6 +404,20 @@ input:focus {
   }
 }
 
+/* ---------- Pagination ---------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 18px 0 6px;
+}
+.pagination .btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
 /* ---------- Mobile enhancements ---------- */
 @media (max-width: 900px) {
   .cards {

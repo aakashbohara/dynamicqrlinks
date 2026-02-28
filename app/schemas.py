@@ -17,6 +17,16 @@ class LinkOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class PaginatedLinks(BaseModel):
+    items: list[LinkOut]
+    total: int
+    skip: int
+    limit: int
+
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class MessageOut(BaseModel):
+    ok: bool
+    detail: str
